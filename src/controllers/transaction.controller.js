@@ -61,6 +61,53 @@ async function createTransaction(req, res) {
         });
     }
 
+    const balance = await fromUserAccount.getBalance();
 
+    if (balance < amount) {
+        return res.status(400).json({
+            message: `Insufficient balance, current balance is ${balance} and required amount is ${amount}`
+        })
+    }
 
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    const transaction = await transactionModel.create({
+        fromAccount,
+        toAccount,
+        amount,
+        idempotencykey,
+        status: "PENDING"
+    }, { session });
+
+    const debitLederEntry = await ledgerModel.create({
+        account: fromAccount,
+        amount: amount,
+        transaction: transaction._id,
+        type: "DEBIT"
+    }, { session });
+
+    const creditLederEntry = await ledgerModel.create({
+        account: toAccount,
+        amount: amount,
+        transaction: transaction._id,
+        type: "CREDIT"
+    }, { session });
+
+    transaction.status = "COMPLETED";
+    await transaction.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    await emailService.sendTransactionEmail(req.user.email, req.user.name, amount, toUserAccount);
+
+    return res.status(200).json({
+        message: "Transaction completed successfully",
+        transaction: transaction
+    });
+}
+
+module.exports = {
+    createTransaction
 }
