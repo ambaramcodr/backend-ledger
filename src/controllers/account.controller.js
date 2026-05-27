@@ -1,8 +1,18 @@
 const accountModel = require('../models/account.model');
 
-async function createAccountController(req,res){
+async function createAccountController(req, res) {
 
     const user = req.user;
+
+    const existingAccounts = await accountModel.find({
+        user: user._id
+    });
+
+    if (existingAccounts.length > 0) {
+        return res.status(400).json({
+            message: "You already have an account"
+        });
+    }
 
     const account = await accountModel.create({
         user: user._id,
@@ -11,9 +21,41 @@ async function createAccountController(req,res){
     return res.status(201).json({
         account
     });
+}
 
+async function getUserAccountsController(req, res) {
+    const accounts = await accountModel.find({
+        user: req.user._id
+    });
+
+    return res.status(200).json({
+        accounts
+    });
+}
+
+async function getAccountBalanceController(req, res) {
+    const { accountId } = req.params;
+    const account = await accountModel.findOne({
+        _id: accountId,
+        user: req.user._id,
+    });
+
+    if (!account) {
+        return res.status(404).json({
+            message: "Account not found"
+        });
+    }
+
+    const balance = await account.getBalance();
+
+    return res.status(200).json({
+        accountId: account._id,
+        balance: balance,
+    });
 }
 
 module.exports = {
-    createAccountController
+    createAccountController,
+    getUserAccountsController,
+    getAccountBalanceController
 };
